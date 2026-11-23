@@ -63,6 +63,46 @@ function ServerRulesSyncEvent:run(connection)
 end
 
 ---------------------------------------------------------------------------------------------------
+-- ServerRulesRulesEvent  server -> client  one chunk of the production/storage/fillType rules (text)
+ServerRulesRulesEvent = {}
+local ServerRulesRulesEvent_mt = Class(ServerRulesRulesEvent, Event)
+InitEventClass(ServerRulesRulesEvent, "ServerRulesRulesEvent")
+
+function ServerRulesRulesEvent.emptyNew()
+    return Event.new(ServerRulesRulesEvent_mt)
+end
+
+function ServerRulesRulesEvent.new(revision, chunkIndex, chunkCount, text)
+    local self = ServerRulesRulesEvent.emptyNew()
+    self.revision = revision
+    self.chunkIndex = chunkIndex
+    self.chunkCount = chunkCount
+    self.text = text
+    return self
+end
+
+function ServerRulesRulesEvent:writeStream(streamId, connection)
+    streamWriteInt32(streamId, self.revision)
+    streamWriteUInt16(streamId, self.chunkIndex)
+    streamWriteUInt16(streamId, self.chunkCount)
+    streamWriteString(streamId, self.text or "")
+end
+
+function ServerRulesRulesEvent:readStream(streamId, connection)
+    self.revision = streamReadInt32(streamId)
+    self.chunkIndex = streamReadUInt16(streamId)
+    self.chunkCount = streamReadUInt16(streamId)
+    self.text = streamReadString(streamId)
+    self:run(connection)
+end
+
+function ServerRulesRulesEvent:run(connection)
+    if connection ~= nil and connection:getIsServer() then
+        ServerRules.onRulesChunk(self.revision, self.chunkIndex, self.chunkCount, self.text)
+    end
+end
+
+---------------------------------------------------------------------------------------------------
 ServerRulesRequestSyncEvent = {}
 local ServerRulesRequestSyncEvent_mt = Class(ServerRulesRequestSyncEvent, Event)
 InitEventClass(ServerRulesRequestSyncEvent, "ServerRulesRequestSyncEvent")

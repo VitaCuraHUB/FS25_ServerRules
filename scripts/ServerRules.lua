@@ -4,7 +4,7 @@
 ServerRules = {}
 ServerRules.MOD_NAME = g_currentModName
 ServerRules.MOD_DIR = g_currentModDirectory
-ServerRules.VERSION = "0.1.0"
+ServerRules.VERSION = "0.2.0"
 ServerRules.SETTINGS_FILENAME = "serverRules.xml"
 ServerRules.SYNC_CHUNK_SIZE = 100
 ServerRules.CLIENT_RESYNC_INTERVAL = 10000 -- ms
@@ -17,6 +17,9 @@ ServerRules.settings = nil        -- server: parsed settings
 ServerRules.reloadTimer = 0
 
 ServerRules.client = {
+    rules = nil,                  -- production/storage/fillType rules received from the server
+    rulesRevision = -1,
+    rulesPending = nil,
     synced = false,
     revision = -1,
     pending = nil,                -- {revision, count, chunks = {}, received}
@@ -52,14 +55,19 @@ end
 -- base game: "data/<path>"                   e.g. "data/placeables/brandless/bakery/bakery.xml"
 -- Always lower case.
 function ServerRules.getItemKey(storeItem)
-    local fn = normalizePath(storeItem.xmlFilename)
+    return ServerRules.getFileKey(storeItem.xmlFilename, storeItem.customEnvironment, storeItem.baseDir)
+end
+
+---Same key for any xml file of the game or a mod (see getItemKey)
+function ServerRules.getFileKey(filename, customEnvironment, baseDir)
+    local fn = normalizePath(filename)
     local lower = string.lower(fn)
-    if storeItem.customEnvironment ~= nil and storeItem.baseDir ~= nil and storeItem.baseDir ~= "" then
-        local base = string.lower(normalizePath(storeItem.baseDir))
+    if customEnvironment ~= nil and baseDir ~= nil and baseDir ~= "" then
+        local base = string.lower(normalizePath(baseDir))
         if string.sub(lower, 1, string.len(base)) == base then
             local rel = string.sub(lower, string.len(base) + 1)
             rel = string.gsub(rel, "^/+", "")
-            return string.lower(storeItem.customEnvironment) .. "/" .. rel
+            return string.lower(customEnvironment) .. "/" .. rel
         end
     end
     if string.sub(lower, 1, 5) == "data/" then

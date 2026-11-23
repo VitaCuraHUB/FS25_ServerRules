@@ -13,7 +13,7 @@ function ServerRules.reloadSettings(isStart)
             ServerRules.log("Leere Einstellungsdatei angelegt: %s", path)
         end
     end
-    local settings, warnings = ServerRulesSettings.load(path)
+    local settings, warnings = ServerRulesSettings.loadAll(ServerRules.getSettingsDirectory())
     if settings == nil then
         local errorText = table.concat(warnings, " | ")
         if isStart or errorText ~= ServerRules.lastLoadError then
@@ -28,7 +28,8 @@ function ServerRules.reloadSettings(isStart)
     ServerRules.lastLoadError = nil
 
     local overrides, unused = ServerRulesPrices.computeOverrides(settings)
-    local fingerprint = ServerRulesPrices.getFingerprint(overrides)
+    local rulesText = ServerRulesSettings.serializeRules(settings)
+    local fingerprint = ServerRulesPrices.getFingerprint(overrides) .. "#" .. rulesText
     ServerRules.settings = settings
     if fingerprint == ServerRules.fingerprint and not isStart then
         return
@@ -38,11 +39,16 @@ function ServerRules.reloadSettings(isStart)
         ServerRules.log("Warnung: %s", w)
     end
     ServerRules.overrides = overrides
+    ServerRules.rulesText = rulesText
     ServerRules.fingerprint = fingerprint
     ServerRules.revision = ServerRules.revision + 1
     local applied, unknown = ServerRulesPrices.applyOverrides(overrides)
     ServerRules.log("Werte geladen (Stand %d): %d Preisregeln, %d Artikel geaendert, %d Regeln ohne Treffer, %d unbekannt",
         ServerRules.revision, #settings.priceRules, applied, unused, unknown)
+    local points, productions, storage = ServerRulesProductions.applyAll(settings)
+    local unknownFillTypes = ServerRulesProductions.setFillTypeFactors(settings)
+    ServerRules.log("Produktionen: %d Regeln, %d Lagerregeln -> %d Gebaeude, %d Rezepte, %d Lagerplaetze geaendert (von %d Produktionsstaetten); Warenpreise: %d Regeln, %d unbekannt",
+        #settings.productionRules, #settings.storageRules, points, productions, storage, #ServerRulesProductions.points, #settings.fillTypeRules, unknownFillTypes)
 
     if settings.writeCheckFile then
         ServerRules.writeCheckFile()
@@ -81,9 +87,70 @@ function ServerRules.writeCheckFile()
         end
         i = i + 1
     end
+    local n = ServerRulesProductions.writeCheck(xml, "serverRulesCheck.productions")
+    -- selling prices: effective price (per 1000 l) at the first selling point that buys the good
+    local stations = {}
+    local em = g_currentMission ~= nil and g_currentMission.economyManager or nil
+    if em ~= nil and em.sellingStations ~= nil then
+        for _, entry in pairs(em.sellingStations) do
+            local st = entry
+            if type(entry) == "table" and entry.getEffectiveFillTypePrice == nil and entry.station ~= nil then
+                st = entry.station
+            end
+            if type(st) == "table" and st.getEffectiveFillTypePrice ~= nil then
+                table.insert(stations, st)
+            end
+        end
+    end
+    local k = 0
+    for index, factor in pairs(ServerRulesProductions.fillTypeFactors) do
+        local key = string.format("serverRulesCheck.sellPrices.fillType(%d)", k)
+        setXMLString(xml, key .. "#name", tostring(g_fillTypeManager:getFillTypeNameByIndex(index)))
+        setXMLFloat(xml, key .. "#factor", factor)
+        for _, st in ipairs(stations) do
+            local ok, price = pcall(st.getEffectiveFillTypePrice, st, index)
+            if ok and price ~= nil and price > 0 then
+                setXMLFloat(xml, key .. "#pricePer1000", price * 1000)
+                setXMLFloat(xml, key .. "#pricePer1000WithoutFactor", price * 1000 / factor)
+                break
+            end
+        end
+        k = k + 1
+    end
+    setXMLInt(xml, "serverRulesCheck.sellPrices#stations", #stations)
     saveXMLFile(xml)
     delete(xml)
-    ServerRules.log("Kontrolldatei geschrieben: %s (%d Artikel)", path, i)
+    ServerRules.log("Kontrolldatei geschrieben: %s (%d Artikel, %d Produktionsgebaeude)", path, i, n)
+end
+
+---Server: rules in effect (loads the file early if production points load before the mission is ready).
+-- Client: rules received from the server (nil until then).
+function ServerRules.getActiveRules()
+    if g_server ~= nil then
+        if ServerRules.settings == nil and not ServerRules.triedEarlyLoad then
+            ServerRules.triedEarlyLoad = true
+            local settings = ServerRulesSettings.loadAll(ServerRules.getSettingsDirectory())
+            if settings ~= nil then
+                ServerRules.settings = settings
+                ServerRules.log("Einstellungen frueh geladen (fuer Produktionen beim Laden des Spielstands)")
+            end
+        end
+        return ServerRules.settings
+    end
+    return ServerRules.client.rules
+end
+
+local RULES_CHUNK_SIZE = 8000
+
+local function buildRuleChunks()
+    local text = ServerRules.rulesText or ""
+    local chunks = {}
+    local pos = 1
+    repeat
+        table.insert(chunks, string.sub(text, pos, pos + RULES_CHUNK_SIZE - 1))
+        pos = pos + RULES_CHUNK_SIZE
+    until pos > string.len(text)
+    return chunks
 end
 
 local function buildChunks()
@@ -106,6 +173,10 @@ function ServerRules.sendSnapshot(connection)
     for i, entries in ipairs(chunks) do
         connection:sendEvent(ServerRulesSyncEvent.new(ServerRules.revision, i, count, entries))
     end
+    local ruleChunks = buildRuleChunks()
+    for i, text in ipairs(ruleChunks) do
+        connection:sendEvent(ServerRulesRulesEvent.new(ServerRules.revision, i, #ruleChunks, text))
+    end
 end
 
 function ServerRules.broadcastSnapshot()
@@ -115,6 +186,40 @@ function ServerRules.broadcastSnapshot()
     local chunks, count = buildChunks()
     for i, entries in ipairs(chunks) do
         g_server:broadcastEvent(ServerRulesSyncEvent.new(ServerRules.revision, i, count, entries), false)
+    end
+    local ruleChunks = buildRuleChunks()
+    for i, text in ipairs(ruleChunks) do
+        g_server:broadcastEvent(ServerRulesRulesEvent.new(ServerRules.revision, i, #ruleChunks, text), false)
+    end
+end
+
+---Client: one chunk of the production/storage/fillType rules arrived
+function ServerRules.onRulesChunk(revision, chunkIndex, chunkCount, text)
+    if g_server ~= nil then
+        return
+    end
+    local c = ServerRules.client
+    if c.rulesPending == nil or c.rulesPending.revision ~= revision then
+        if c.rulesPending ~= nil and revision < c.rulesPending.revision then
+            return
+        end
+        c.rulesPending = {revision = revision, count = chunkCount, chunks = {}, received = 0}
+    end
+    if c.rulesPending.chunks[chunkIndex] == nil then
+        c.rulesPending.chunks[chunkIndex] = text
+        c.rulesPending.received = c.rulesPending.received + 1
+    end
+    if c.rulesPending.received >= c.rulesPending.count then
+        local parts = {}
+        for i = 1, c.rulesPending.count do
+            table.insert(parts, c.rulesPending.chunks[i] or "")
+        end
+        c.rules = ServerRulesSettings.deserializeRules(table.concat(parts))
+        c.rulesRevision = revision
+        c.rulesPending = nil
+        local points, productions, storage = ServerRulesProductions.applyAll(c.rules)
+        ServerRules.log("Produktionsregeln vom Server uebernommen (Stand %d): %d Gebaeude, %d Rezepte, %d Lagerplaetze geaendert",
+            revision, points, productions, storage)
     end
 end
 
@@ -169,10 +274,36 @@ local listener = {}
 
 function listener:loadMap(filename)
     ServerRules.log("Version %s geladen (%s)", ServerRules.VERSION, g_server ~= nil and "Server" or "Client")
+    if g_messageCenter ~= nil and MessageType ~= nil and MessageType.CURRENT_MISSION_LOADED ~= nil then
+        g_messageCenter:subscribeOneshot(MessageType.CURRENT_MISSION_LOADED, ServerRules.onAllLoaded, ServerRules)
+    end
+end
+
+---Everything incl. the savegame placeables is loaded (production points load after loadMission00Finished)
+function ServerRules.onAllLoaded()
+    if g_server == nil or ServerRules.settings == nil then
+        return
+    end
+    local s = ServerRules.settings
+    local points, productions, storage = ServerRulesProductions.applyAll(s)
+    ServerRules.log("Spielstand geladen: %d Produktionsstaetten, davon %d Gebaeude angepasst (%d Rezepte, %d Lagerplaetze)",
+        #ServerRulesProductions.points, points, productions, storage)
+    if s.writeCheckFile then
+        ServerRules.writeCheckFile()
+    end
 end
 
 function listener:deleteMap()
     ServerRulesPrices.resetAll()
+    ServerRulesProductions.applyAll(nil)
+    ServerRulesProductions.points = {}
+    ServerRulesProductions.originals = {}
+    ServerRulesProductions.fillTypeFactors = {}
+    ServerRules.triedEarlyLoad = false
+    ServerRules.rulesText = nil
+    ServerRules.client.rules = nil
+    ServerRules.client.rulesRevision = -1
+    ServerRules.client.rulesPending = nil
     ServerRules.isInitialized = false
     ServerRules.settings = nil
     ServerRules.overrides = {}
@@ -195,7 +326,7 @@ function listener:update(dt)
                 ServerRules.reloadSettings(false)
             end
         end
-    elseif g_client ~= nil and not ServerRules.client.synced then
+    elseif g_client ~= nil and (not ServerRules.client.synced or ServerRules.client.rulesRevision ~= ServerRules.client.revision) then
         local now = g_time or 0
         if now - ServerRules.client.lastRequestTime > ServerRules.CLIENT_RESYNC_INTERVAL then
             ServerRules.client.lastRequestTime = now

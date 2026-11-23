@@ -4,15 +4,15 @@ Admin tool for **dedicated multiplayer servers**. The server reads all values fr
 and sends them to every player on join. Players cannot change them, and you can change values
 without releasing a new mod version.
 
-> Status: **work in progress** – stage 1 (shop prices and daily upkeep). Untested in multiplayer
-> with clients so far. Use at your own risk; back up your savegame.
+> Status: **work in progress** – stages 1 and 2 tested on a dedicated server, not yet with
+> clients. Use at your own risk; back up your savegame.
 
 ## Stages
 
 | Stage | Content | Status |
 |---|---|---|
-| 1 | Shop prices and daily upkeep of all store items (vehicles, tools, buildings, hand tools) | in progress |
-| 2 | Productions: recipes, cycles per hour, operating costs, storage; selling prices of goods | planned |
+| 1 | Shop prices and daily upkeep of all store items (vehicles, tools, buildings, hand tools) | server-tested |
+| 2 | Productions: recipes, cycles per hour, operating costs, storage; selling prices of goods | server-tested |
 | 3 | Roles per farm: allowed purchases, contracts, loans, selling points; role menu in game | planned |
 
 ## Installation
@@ -59,6 +59,38 @@ separately, so one rule can set the price and another one the upkeep.
 
 **Already bought items** keep their purchase value (it is stored in the savegame). Daily upkeep
 changes apply to them too.
+
+### Productions (stage 2)
+
+```xml
+<productions>
+    <!-- one recipe of one building: absolute values; input/output amounts per fill type -->
+    <production item="FS25_SomeMap/maps/placeables/bakery/bakery.xml" id="cake" cyclesPerHour="0.5" costsPerHour="10">
+        <output fillType="CAKE" amount="25"/>
+    </production>
+    <!-- every recipe of a mod (incl. map productions of a map mod): factors -->
+    <production mod="FS25_SomeFactoryPack" cyclesFactor="0.1" costsFactor="5" inputFactor="1" outputFactor="0.5"/>
+    <!-- storage: one fill type, or all (without fillType = also the total capacity) -->
+    <storage item="FS25_SomeMap/maps/placeables/bakery/bakery.xml" fillType="CAKE" capacity="3000"/>
+    <storage mod="FS25_SomeFactoryPack" capacityFactor="2"/>
+</productions>
+<fillTypes>
+    <!-- selling price factor at all selling points -->
+    <fillType name="CAKE" priceFactor="0.8"/>
+</fillTypes>
+```
+
+Works for bought buildings, map productions and greenhouses. Only **one** rule applies per recipe
+(the most specific: item > mod, with `id` > without); it is not merged with less specific rules.
+Rules are applied while the building loads, before the savegame fill levels – a larger storage
+keeps its contents across restarts. Production runs on the server; clients get the rules for the
+display. Selling price factors are applied by the server (the price clients see comes from the
+server – to be confirmed in a client test).
+
+### Generated rules
+
+The server also reads `serverRules-auto.xml` from the same folder (e.g. written by a balancing
+tool). Rules in `serverRules.xml` always win over generated ones where both match.
 
 ## How it works
 

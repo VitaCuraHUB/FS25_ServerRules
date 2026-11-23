@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <modDesc descVersion="114">
     <author>FS25_ServerRules contributors</author>
-    <version>0.1.0.0</version>
+    <version>0.2.0.0</version>
     <title>
         <en>Server Rules: Balance and Roles</en>
         <de>Server-Regeln: Balance und Rollen</de>
@@ -11,12 +11,16 @@
 
 Stage 1: shop prices and daily upkeep of all store items (vehicles, tools, buildings, hand tools) - per item, per mod, per category or brand, as absolute value or factor. Configuration surcharges are scaled proportionally. Changes in the file are picked up automatically while the server runs.
 
-Planned: production recipes, cycles, costs and storage; selling prices of goods; roles per farm with purchase, contract, loan and selling rules.]]></en>
+Stage 2: production recipes, cycles per hour, operating costs and storage of all productions (bought, map, greenhouses); selling price factors of goods.
+
+Planned: roles per farm with purchase, contract, loan and selling rules.]]></en>
         <de><![CDATA[Admin-Werkzeug fuer Dedicated Server. Alle Werte kommen aus einer Einstellungsdatei auf dem Server (modSettings/FS25_ServerRules/serverRules.xml) und werden beim Beitritt an alle Spieler geschickt. Spieler koennen sie nicht aendern.
 
 Stufe 1: Shoppreise und taeglicher Unterhalt aller Kaufobjekte (Fahrzeuge, Geraete, Gebaeude, Handwerkzeuge) - je Artikel, Mod, Kategorie oder Marke, als fester Wert oder Faktor. Aufpreise fuer Ausstattungen werden anteilig mitgerechnet. Aenderungen an der Datei uebernimmt der Server im laufenden Spiel.
 
-Geplant: Rezepte, Takt, Kosten und Lager von Produktionen; Verkaufspreise von Waren; Rollen je Hof mit Regeln fuer Kaufen, Auftraege, Kredite und Verkauf.]]></de>
+Stufe 2: Rezepte, Takt, Betriebskosten und Lager aller Produktionen (gekauft, Karte, Gewaechshaeuser); Verkaufspreis-Faktoren fuer Waren.
+
+Geplant: Rollen je Hof mit Regeln fuer Kaufen, Auftraege, Kredite und Verkauf.]]></de>
     </description>
     <iconFilename>icon_serverRules.dds</iconFilename>
     <multiplayer supported="true"/>
@@ -25,6 +29,7 @@ Geplant: Rezepte, Takt, Kosten und Lager von Produktionen; Verkaufspreise von Wa
         <sourceFile filename="scripts/ServerRules.lua"/>
         <sourceFile filename="scripts/ServerRulesSettings.lua"/>
         <sourceFile filename="scripts/ServerRulesPrices.lua"/>
+        <sourceFile filename="scripts/ServerRulesProductions.lua"/>
         <sourceFile filename="scripts/ServerRulesEvents.lua"/>
         <sourceFile filename="scripts/ServerRulesMain.lua"/>
     </extraSourceFiles>
