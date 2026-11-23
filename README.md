@@ -17,6 +17,17 @@ without releasing a new mod version.
 
 ## Installation
 
+**Players (one line):** open PowerShell and paste
+
+```powershell
+irm https://raw.githubusercontent.com/VitaCuraHUB/FS25_ServerRules/main/install.ps1 | iex
+```
+
+It downloads the newest release, checks its SHA-256 and copies it into your mods folder (also if
+you use a mods folder override). Nothing else is changed.
+
+**Manually:**
+
 - Put `FS25_ServerRules.zip` into the mods folder of the **server and every player** (same file for
   all – multiplayer requires identical mods).
 - Activate it for the savegame (dedicated server: web interface).
