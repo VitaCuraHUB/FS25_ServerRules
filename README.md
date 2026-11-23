@@ -1,0 +1,76 @@
+# FS25_ServerRules – Server Rules: Balance and Roles (Farming Simulator 25)
+
+Admin tool for **dedicated multiplayer servers**. The server reads all values from a settings file
+and sends them to every player on join. Players cannot change them, and you can change values
+without releasing a new mod version.
+
+> Status: **work in progress** – stage 1 (shop prices and daily upkeep). Untested in multiplayer
+> with clients so far. Use at your own risk; back up your savegame.
+
+## Stages
+
+| Stage | Content | Status |
+|---|---|---|
+| 1 | Shop prices and daily upkeep of all store items (vehicles, tools, buildings, hand tools) | in progress |
+| 2 | Productions: recipes, cycles per hour, operating costs, storage; selling prices of goods | planned |
+| 3 | Roles per farm: allowed purchases, contracts, loans, selling points; role menu in game | planned |
+
+## Installation
+
+- Put `FS25_ServerRules.zip` into the mods folder of the **server and every player** (same file for
+  all – multiplayer requires identical mods).
+- Activate it for the savegame (dedicated server: web interface).
+- On first start the server creates `modSettings/FS25_ServerRules/serverRules.xml` in its profile
+  folder (e.g. `Documents/My Games/FarmingSimulator2025/`). Edit it there.
+
+## Settings file
+
+```xml
+<serverRules version="1">
+    <!-- reloadInterval: seconds between checks for changes (0 = only at server start)
+         writeCheckFile: write serverRules-check.xml with the values really in effect -->
+    <general reloadInterval="60" writeCheckFile="false"/>
+    <prices>
+        <!-- no criteria = every item -->
+        <rule priceFactor="1.0"/>
+        <!-- all buildings with productions from mods: 5x price -->
+        <rule source="mod" category="productionPoints" priceFactor="5" upkeepFactor="3"/>
+        <!-- one whole mod -->
+        <rule mod="FS25_SomeFactoryPack" priceFactor="10"/>
+        <!-- one brand of vehicles -->
+        <rule brand="FENDT" species="vehicle" upkeepFactor="1.5"/>
+        <!-- one item: mod name + path inside the zip, or data/... for base game items -->
+        <rule item="FS25_SomeFactoryPack/xml/bakery.xml" price="250000" dailyUpkeep="120"/>
+        <rule item="data/placeables/brandless/productionPointsGeneric/bakery/bakery.xml" price="175000"/>
+    </prices>
+</serverRules>
+```
+
+**Criteria** (every given criterion must match): `item`, `mod`, `category` (shop category name,
+e.g. `tractorsL`, `productionPoints`), `brand` (e.g. `FENDT`), `species` (`vehicle`, `placeable`,
+`handTool`), `source` (`mod`, `base`, `dlc`). Case does not matter.
+
+**Values:** `price` or `priceFactor`; `dailyUpkeep` or `upkeepFactor`. Configuration surcharges
+(engine, tyres …) scale with the price factor.
+
+**Which rule wins:** the most specific matching rule (item > mod > category/brand > species >
+source > no criteria); on a tie the later one in the file. Price and upkeep are decided
+separately, so one rule can set the price and another one the upkeep.
+
+**Already bought items** keep their purchase value (it is stored in the savegame). Daily upkeep
+changes apply to them too.
+
+## How it works
+
+- Server: reads the file at start and then every `reloadInterval` seconds; if the result changed,
+  it applies the new values and sends them to all players.
+- Clients: get a snapshot on join (in chunks) and ask again every 10 s until it is complete.
+- Purchases are always calculated by the server, so a client cannot buy at a different price.
+
+## Building
+
+`powershell -ExecutionPolicy Bypass -File tools\build.ps1` → `dist\FS25_ServerRules.zip` (+ SHA-256).
+
+## License
+
+MIT – see `LICENSE`. No code from other mods is included.

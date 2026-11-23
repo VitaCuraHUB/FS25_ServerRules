@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<modDesc descVersion="114">
+    <author>FS25_ServerRules contributors</author>
+    <version>0.1.0.0</version>
+    <title>
+        <en>Server Rules: Balance and Roles</en>
+        <de>Server-Regeln: Balance und Rollen</de>
+    </title>
+    <description>
+        <en><![CDATA[Admin tool for dedicated servers. All values come from a settings file on the server (modSettings/FS25_ServerRules/serverRules.xml) and are sent to every player when joining. Players cannot change them.
+
+Stage 1: shop prices and daily upkeep of all store items (vehicles, tools, buildings, hand tools) - per item, per mod, per category or brand, as absolute value or factor. Configuration surcharges are scaled proportionally. Changes in the file are picked up automatically while the server runs.
+
+Planned: production recipes, cycles, costs and storage; selling prices of goods; roles per farm with purchase, contract, loan and selling rules.]]></en>
+        <de><![CDATA[Admin-Werkzeug fuer Dedicated Server. Alle Werte kommen aus einer Einstellungsdatei auf dem Server (modSettings/FS25_ServerRules/serverRules.xml) und werden beim Beitritt an alle Spieler geschickt. Spieler koennen sie nicht aendern.
+
+Stufe 1: Shoppreise und taeglicher Unterhalt aller Kaufobjekte (Fahrzeuge, Geraete, Gebaeude, Handwerkzeuge) - je Artikel, Mod, Kategorie oder Marke, als fester Wert oder Faktor. Aufpreise fuer Ausstattungen werden anteilig mitgerechnet. Aenderungen an der Datei uebernimmt der Server im laufenden Spiel.
+
+Geplant: Rezepte, Takt, Kosten und Lager von Produktionen; Verkaufspreise von Waren; Rollen je Hof mit Regeln fuer Kaufen, Auftraege, Kredite und Verkauf.]]></de>
+    </description>
+    <iconFilename>icon_serverRules.dds</iconFilename>
+    <multiplayer supported="true"/>
+    <l10n filenamePrefix="l10n/translation"/>
+    <extraSourceFiles>
+        <sourceFile filename="scripts/ServerRules.lua"/>
+        <sourceFile filename="scripts/ServerRulesSettings.lua"/>
+        <sourceFile filename="scripts/ServerRulesPrices.lua"/>
+        <sourceFile filename="scripts/ServerRulesEvents.lua"/>
+        <sourceFile filename="scripts/ServerRulesMain.lua"/>
+    </extraSourceFiles>
+</modDesc>
