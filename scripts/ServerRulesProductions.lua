@@ -207,14 +207,59 @@ function ServerRulesProductions.applyToPoint(pp, rules)
     return changedProductions, changedStorage
 end
 
+---Goods that must always be sold directly (e.g. a substitute currency like coins -> paid in euro)
+ServerRulesProductions.forcedDirectSell = {}
+
+function ServerRulesProductions.setForcedDirectSell(rules)
+    local forced = {}
+    for _, rule in ipairs((rules ~= nil and rules.fillTypeRules) or {}) do
+        if rule.forceDirectSell and g_fillTypeManager ~= nil then
+            local index = g_fillTypeManager:getFillTypeIndexByName(rule.name)
+            if index ~= nil then
+                forced[index] = true
+            end
+        end
+    end
+    ServerRulesProductions.forcedDirectSell = forced
+end
+
+local originalSetOutputMode = nil
+
+---Switches every forced output of this production point to "sell directly"
+function ServerRulesProductions.enforceDirectSell(pp)
+    if pp.productions == nil or ProductionPoint.OUTPUT_MODE == nil or next(ServerRulesProductions.forcedDirectSell) == nil then
+        return 0
+    end
+    local n = 0
+    local done = {}
+    for _, production in ipairs(pp.productions) do
+        for _, output in ipairs(production.outputs or {}) do
+            local ft = output.type
+            if ft ~= nil and not done[ft] and ServerRulesProductions.forcedDirectSell[ft] then
+                done[ft] = true
+                if pp.outputFillTypeIdsDirectSell == nil or not pp.outputFillTypeIdsDirectSell[ft] then
+                    local setter = originalSetOutputMode or pp.setOutputDistributionMode
+                    if setter ~= nil then
+                        setter(pp, ft, ProductionPoint.OUTPUT_MODE.DIRECT_SELL, true)
+                        n = n + 1
+                    end
+                end
+            end
+        end
+    end
+    return n
+end
+
 ---Applies the rules to all registered production points
 function ServerRulesProductions.applyAll(rules)
+    ServerRulesProductions.setForcedDirectSell(rules)
     local points, productions, storage = 0, 0, 0
     local alive = {}
     for _, pp in ipairs(ServerRulesProductions.points) do
         if not pp.isDeleted then
             table.insert(alive, pp)
             local p, s = ServerRulesProductions.applyToPoint(pp, rules)
+            ServerRulesProductions.enforceDirectSell(pp)
             if p > 0 or s > 0 then
                 points = points + 1
             end
@@ -292,6 +337,10 @@ local function onProductionPointLoaded(pp)
     local rules = ServerRules.getActiveRules()
     if rules ~= nil then
         ServerRulesProductions.applyToPoint(pp, rules)
+        if g_fillTypeManager ~= nil and next(ServerRulesProductions.forcedDirectSell) == nil then
+            ServerRulesProductions.setForcedDirectSell(rules)
+        end
+        ServerRulesProductions.enforceDirectSell(pp)
     end
 end
 
@@ -323,4 +372,17 @@ if SellingStation ~= nil and SellingStation.getEffectiveFillTypePrice ~= nil the
     end)
 else
     ServerRules.log("FEHLER: SellingStation.getEffectiveFillTypePrice fehlt - Warenpreise inaktiv")
+end
+
+-- A forced good can only be sold directly: other output modes are turned into "sell directly"
+if ProductionPoint ~= nil and ProductionPoint.setOutputDistributionMode ~= nil then
+    originalSetOutputMode = ProductionPoint.setOutputDistributionMode
+    ProductionPoint.setOutputDistributionMode = Utils.overwrittenFunction(ProductionPoint.setOutputDistributionMode, function(self, superFunc, fillTypeId, mode, ...)
+        if fillTypeId ~= nil and ServerRulesProductions.forcedDirectSell[fillTypeId] and ProductionPoint.OUTPUT_MODE ~= nil then
+            mode = ProductionPoint.OUTPUT_MODE.DIRECT_SELL
+        end
+        return superFunc(self, fillTypeId, mode, ...)
+    end)
+else
+    ServerRules.log("Warnung: ProductionPoint.setOutputDistributionMode fehlt - Direktverkauf-Regel inaktiv")
 end

@@ -162,7 +162,9 @@ function ServerRulesSettings.load(path)
             price = readNumber(xml, key .. "#price", warnings, name),
             priceFactor = readNumber(xml, key .. "#priceFactor", warnings, name),
             dailyUpkeep = readNumber(xml, key .. "#dailyUpkeep", warnings, name),
-            upkeepFactor = readNumber(xml, key .. "#upkeepFactor", warnings, name)
+            upkeepFactor = readNumber(xml, key .. "#upkeepFactor", warnings, name),
+            name = readString(xml, key .. "#name"),
+            nameSuffix = readString(xml, key .. "#nameSuffix")
         }
         for _, field in ipairs({"mod", "category", "brand", "species", "source"}) do
             if rule[field] ~= nil then
@@ -173,8 +175,8 @@ function ServerRulesSettings.load(path)
             table.insert(warnings, string.format("%s: source='%s' unbekannt (mod|base|dlc) - Regel ignoriert", name, rule.source))
         elseif rule.species ~= nil and rule.species ~= "vehicle" and rule.species ~= "placeable" and rule.species ~= "handtool" then
             table.insert(warnings, string.format("%s: species='%s' unbekannt (vehicle|placeable|handTool) - Regel ignoriert", name, rule.species))
-        elseif rule.price == nil and rule.priceFactor == nil and rule.dailyUpkeep == nil and rule.upkeepFactor == nil then
-            table.insert(warnings, string.format("%s: kein Wert (price, priceFactor, dailyUpkeep, upkeepFactor) - Regel ignoriert", name))
+        elseif rule.price == nil and rule.priceFactor == nil and rule.dailyUpkeep == nil and rule.upkeepFactor == nil and rule.name == nil and rule.nameSuffix == nil then
+            table.insert(warnings, string.format("%s: kein Wert (price, priceFactor, dailyUpkeep, upkeepFactor, name, nameSuffix) - Regel ignoriert", name))
         else
             if rule.price ~= nil and rule.priceFactor ~= nil then
                 table.insert(warnings, string.format("%s: price und priceFactor zugleich - price gilt", name))
@@ -311,10 +313,11 @@ function ServerRulesSettings.loadProductionRules(xml, settings, warnings)
         local name = string.format("Warenregel %d", i + 1)
         local ft = readString(xml, key .. "#name")
         local f = readNumber(xml, key .. "#priceFactor", warnings, name)
-        if ft == nil or f == nil then
-            table.insert(warnings, string.format("%s: name oder priceFactor fehlt - ignoriert", name))
+        local direct = getXMLBool(xml, key .. "#forceDirectSell") == true
+        if ft == nil or (f == nil and not direct) then
+            table.insert(warnings, string.format("%s: name oder priceFactor/forceDirectSell fehlt - ignoriert", name))
         else
-            table.insert(settings.fillTypeRules, {name = string.upper(ft), priceFactor = f})
+            table.insert(settings.fillTypeRules, {name = string.upper(ft), priceFactor = f, forceDirectSell = direct})
         end
         i = i + 1
     end
@@ -390,7 +393,7 @@ function ServerRulesSettings.serializeRules(settings)
         table.insert(lines, table.concat({"S", enc(r.order), enc(r.item), enc(r.mod), enc(r.fillType), enc(r.capacity), enc(r.capacityFactor), enc(r.score)}, SEP))
     end
     for _, r in ipairs(settings.fillTypeRules or {}) do
-        table.insert(lines, table.concat({"F", enc(r.name), enc(r.priceFactor)}, SEP))
+        table.insert(lines, table.concat({"F", enc(r.name), enc(r.priceFactor), r.forceDirectSell and "1" or ""}, SEP))
     end
     return table.concat(lines, "\n")
 end
@@ -407,7 +410,7 @@ function ServerRulesSettings.deserializeRules(text)
             table.insert(rules.storageRules, {order = decNum(f[2]) or 0, item = dec(f[3]), mod = dec(f[4]), fillType = dec(f[5]),
                 capacity = decNum(f[6]), capacityFactor = decNum(f[7]), score = decNum(f[8]) or 0})
         elseif f[1] == "F" then
-            table.insert(rules.fillTypeRules, {name = dec(f[2]), priceFactor = decNum(f[3])})
+            table.insert(rules.fillTypeRules, {name = dec(f[2]), priceFactor = decNum(f[3]), forceDirectSell = f[4] == "1"})
         end
     end
     return rules

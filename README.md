@@ -61,7 +61,8 @@ you use a mods folder override). Nothing else is changed.
 e.g. `tractorsL`, `productionPoints`), `brand` (e.g. `FENDT`), `species` (`vehicle`, `placeable`,
 `handTool`), `source` (`mod`, `base`, `dlc`). Case does not matter.
 
-**Values:** `price` or `priceFactor`; `dailyUpkeep` or `upkeepFactor`. Configuration surcharges
+**Values:** `price` or `priceFactor`; `dailyUpkeep` or `upkeepFactor`. Shop name: `name` (replaces it) or
+`nameSuffix` (appended, e.g. `nameSuffix=" (large)"`). Configuration surcharges
 (engine, tyres …) scale with the price factor.
 
 **Which rule wins:** the most specific matching rule (item > mod > category/brand > species >
@@ -88,6 +89,8 @@ changes apply to them too.
 <fillTypes>
     <!-- selling price factor at all selling points -->
     <fillType name="CAKE" priceFactor="0.8"/>
+    <!-- always "sell directly" (e.g. a substitute currency): the building pays euro, the output mode cannot be changed -->
+    <fillType name="SOMECOIN" forceDirectSell="true"/>
 </fillTypes>
 ```
 

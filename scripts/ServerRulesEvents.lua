@@ -34,6 +34,8 @@ function ServerRulesSyncEvent:writeStream(streamId, connection)
         streamWriteFloat32(streamId, e.priceFactor)
         streamWriteFloat32(streamId, e.upkeep)
         streamWriteFloat32(streamId, e.upkeepFactor)
+        streamWriteString(streamId, e.name or "")
+        streamWriteString(streamId, e.nameSuffix or "")
     end
 end
 
@@ -50,6 +52,8 @@ function ServerRulesSyncEvent:readStream(streamId, connection)
         e.priceFactor = streamReadFloat32(streamId)
         e.upkeep = streamReadFloat32(streamId)
         e.upkeepFactor = streamReadFloat32(streamId)
+        e.name = streamReadString(streamId)
+        e.nameSuffix = streamReadString(streamId)
         table.insert(self.entries, e)
     end
     self:run(connection)

@@ -73,7 +73,7 @@ end
 function ServerRulesPrices.captureOriginal(storeItem)
     local o = ServerRulesPrices.originals[storeItem]
     if o == nil then
-        o = {price = storeItem.price or 0, dailyUpkeep = storeItem.dailyUpkeep or 0, configs = {}}
+        o = {price = storeItem.price or 0, dailyUpkeep = storeItem.dailyUpkeep or 0, name = storeItem.name, configs = {}}
         forEachConfigItem(storeItem, function(cfg)
             o.configs[cfg] = {price = cfg.price, dailyUpkeep = cfg.dailyUpkeep}
         end)
@@ -89,6 +89,7 @@ function ServerRulesPrices.resetAll()
         if o ~= nil then
             storeItem.price = o.price
             storeItem.dailyUpkeep = o.dailyUpkeep
+            storeItem.name = o.name
             for cfg, v in pairs(o.configs) do
                 cfg.price = v.price
                 cfg.dailyUpkeep = v.dailyUpkeep
@@ -150,7 +151,7 @@ function ServerRulesPrices.computeOverrides(settings)
             species = getSpeciesName(storeItem),
             brand = getBrandName(storeItem)
         }
-        local bestPrice, bestUpkeep = nil, nil
+        local bestPrice, bestUpkeep, bestName = nil, nil, nil
         for _, rule in ipairs(rules) do
             if ruleMatches(rule, storeItem, info) then
                 ruleUsed[rule] = true
@@ -159,6 +160,9 @@ function ServerRulesPrices.computeOverrides(settings)
                 end
                 if (rule.dailyUpkeep ~= nil or rule.upkeepFactor ~= nil) and isBetter(rule, bestUpkeep) then
                     bestUpkeep = rule
+                end
+                if (rule.name ~= nil or rule.nameSuffix ~= nil) and isBetter(rule, bestName) then
+                    bestName = rule
                 end
             end
         end
@@ -182,13 +186,20 @@ function ServerRulesPrices.computeOverrides(settings)
                 upkeep = origUpkeep * upkeepFactor
             end
         end
-        if price ~= origPrice or upkeep ~= origUpkeep or priceFactor ~= 1 or upkeepFactor ~= 1 then
+        local newName, nameSuffix = "", ""
+        if bestName ~= nil then
+            newName = bestName.name or ""
+            nameSuffix = bestName.nameSuffix or ""
+        end
+        if price ~= origPrice or upkeep ~= origUpkeep or priceFactor ~= 1 or upkeepFactor ~= 1 or newName ~= "" or nameSuffix ~= "" then
             table.insert(result, {
                 key = info.key,
                 price = math.floor(price + 0.5),
                 priceFactor = priceFactor,
                 upkeep = upkeep,
-                upkeepFactor = upkeepFactor
+                upkeepFactor = upkeepFactor,
+                name = newName,
+                nameSuffix = nameSuffix
             })
         end
     end
@@ -227,6 +238,12 @@ function ServerRulesPrices.applyOverrides(list)
             local o = ServerRulesPrices.captureOriginal(storeItem)
             storeItem.price = e.price
             storeItem.dailyUpkeep = e.upkeep
+            if e.name ~= nil and e.name ~= "" then
+                storeItem.name = e.name
+            end
+            if e.nameSuffix ~= nil and e.nameSuffix ~= "" then
+                storeItem.name = tostring(storeItem.name) .. e.nameSuffix
+            end
             for cfg, v in pairs(o.configs) do
                 local p = tonumber(v.price)
                 if p ~= nil then
@@ -248,7 +265,7 @@ end
 function ServerRulesPrices.getFingerprint(list)
     local parts = {}
     for _, e in ipairs(list) do
-        table.insert(parts, string.format("%s=%d/%.6f/%.4f/%.6f", e.key, e.price, e.priceFactor, e.upkeep, e.upkeepFactor))
+        table.insert(parts, string.format("%s=%d/%.6f/%.4f/%.6f/%s/%s", e.key, e.price, e.priceFactor, e.upkeep, e.upkeepFactor, e.name or "", e.nameSuffix or ""))
     end
     return table.concat(parts, ";")
 end
