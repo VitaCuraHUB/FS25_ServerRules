@@ -332,9 +332,19 @@ end
 ---------------------------------------------------------------------------------------------------
 -- Hooks
 
+ServerRulesProductions.clientLogCount = 0
+
 local function onProductionPointLoaded(pp)
     table.insert(ServerRulesProductions.points, pp)
     local rules = ServerRules.getActiveRules()
+    if rules ~= nil and g_server == nil then
+        -- client: log which buildings get adjusted (to verify the display in tests)
+        local p, s = ServerRulesProductions.applyToPoint(pp, rules)
+        if (p > 0 or s > 0) and ServerRulesProductions.clientLogCount < 30 then
+            ServerRulesProductions.clientLogCount = ServerRulesProductions.clientLogCount + 1
+            ServerRules.log("Produktion angepasst: %s (%d Rezepte, %d Lagerplaetze)", tostring(ServerRulesProductions.getPointKey(pp)), p, s)
+        end
+    end
     if rules ~= nil then
         ServerRulesProductions.applyToPoint(pp, rules)
         if g_fillTypeManager ~= nil and next(ServerRulesProductions.forcedDirectSell) == nil then

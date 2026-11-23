@@ -4,7 +4,7 @@
 ServerRules = {}
 ServerRules.MOD_NAME = g_currentModName
 ServerRules.MOD_DIR = g_currentModDirectory
-ServerRules.VERSION = "0.2.0"
+ServerRules.VERSION = "0.3.0"
 ServerRules.SETTINGS_FILENAME = "serverRules.xml"
 ServerRules.SYNC_CHUNK_SIZE = 100
 ServerRules.CLIENT_RESYNC_INTERVAL = 10000 -- ms

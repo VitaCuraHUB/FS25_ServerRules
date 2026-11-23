@@ -242,7 +242,11 @@ function ServerRulesPrices.applyOverrides(list)
                 storeItem.name = e.name
             end
             if e.nameSuffix ~= nil and e.nameSuffix ~= "" then
-                storeItem.name = tostring(storeItem.name) .. e.nameSuffix
+                local suffix = e.nameSuffix
+                if string.sub(suffix, 1, 1) ~= " " then
+                    suffix = " " .. suffix
+                end
+                storeItem.name = tostring(storeItem.name) .. suffix
             end
             for cfg, v in pairs(o.configs) do
                 local p = tonumber(v.price)
