@@ -4,7 +4,7 @@
 ServerRules = {}
 ServerRules.MOD_NAME = g_currentModName
 ServerRules.MOD_DIR = g_currentModDirectory
-ServerRules.VERSION = "0.4.0"
+ServerRules.VERSION = "0.5.0"
 ServerRules.SETTINGS_FILENAME = "serverRules.xml"
 ServerRules.SYNC_CHUNK_SIZE = 100
 ServerRules.CLIENT_RESYNC_INTERVAL = 10000 -- ms
@@ -97,4 +97,41 @@ end
 
 function ServerRules.getSettingsPath()
     return ServerRules.getSettingsDirectory() .. ServerRules.SETTINGS_FILENAME
+end
+
+---Round a price to a "smooth" value (Alex: no odd prices):
+-- < 2.000 -> 100, < 10.000 -> 500, < 100.000 -> 1.000, < 1 Mio -> 5.000, else 50.000
+function ServerRules.roundPrice(p)
+    if p == nil or p <= 0 then
+        return p
+    end
+    local step = 50000
+    if p < 2000 then
+        step = 100
+    elseif p < 10000 then
+        step = 500
+    elseif p < 100000 then
+        step = 1000
+    elseif p < 1000000 then
+        step = 5000
+    end
+    local r = math.floor(p / step + 0.5) * step
+    if r <= 0 then
+        r = step
+    end
+    return r
+end
+
+---Round a daily upkeep: < 100 -> 1, < 1.000 -> 5, else 10
+function ServerRules.roundUpkeep(u)
+    if u == nil or u <= 0 then
+        return u
+    end
+    local step = 10
+    if u < 100 then
+        step = 1
+    elseif u < 1000 then
+        step = 5
+    end
+    return math.floor(u / step + 0.5) * step
 end

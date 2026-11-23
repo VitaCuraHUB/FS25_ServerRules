@@ -188,7 +188,7 @@ function ServerRulesPrices.computeOverrides(settings)
                 priceFactor = origPrice > 0 and (price / origPrice) or 1
             else
                 priceFactor = bestPrice.priceFactor
-                price = origPrice * priceFactor
+                price = ServerRules.roundPrice(origPrice * priceFactor)
             end
         end
         local upkeep, upkeepFactor = origUpkeep, 1
@@ -198,7 +198,7 @@ function ServerRulesPrices.computeOverrides(settings)
                 upkeepFactor = origUpkeep > 0 and (upkeep / origUpkeep) or 1
             else
                 upkeepFactor = bestUpkeep.upkeepFactor
-                upkeep = origUpkeep * upkeepFactor
+                upkeep = ServerRules.roundUpkeep(origUpkeep * upkeepFactor)
             end
         end
         local newName, nameSuffix = "", ""
@@ -266,11 +266,11 @@ function ServerRulesPrices.applyOverrides(list)
             for cfg, v in pairs(o.configs) do
                 local p = tonumber(v.price)
                 if p ~= nil then
-                    cfg.price = p * e.priceFactor
+                    cfg.price = (p ~= 0 and e.priceFactor ~= 1) and ServerRules.roundPrice(p * e.priceFactor) or p
                 end
                 local u = tonumber(v.dailyUpkeep)
                 if u ~= nil then
-                    cfg.dailyUpkeep = u * e.upkeepFactor
+                    cfg.dailyUpkeep = (u ~= 0 and e.upkeepFactor ~= 1) and ServerRules.roundUpkeep(u * e.upkeepFactor) or u
                 end
             end
             table.insert(ServerRulesPrices.applied, storeItem)
