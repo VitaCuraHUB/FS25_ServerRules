@@ -94,7 +94,8 @@ ServerRulesRoles.TEXTS = {
 }
 
 function ServerRulesRoles.text(key, ...)
-    local lang = (g_languageShortName == "de") and "de" or "en"
+    -- German unless the game clearly runs in English (our players are German)
+    local lang = (g_languageShortName == "en") and "en" or "de"
     local t = ServerRulesRoles.TEXTS[lang][key] or ServerRulesRoles.TEXTS.de[key] or key
     if select("#", ...) > 0 then
         local ok, s = pcall(string.format, t, ...)
@@ -445,12 +446,32 @@ function ServerRulesRoles.notifyFarm(farmId, key, ...)
     end
 end
 
+ServerRulesRoles.DIALOG_KEYS = {buyDenied = true, missionDenied = true, sellDenied = true, freeDenied = true, notAdmin = true}
+ServerRulesRoles.dialogQueue = {}
+
 function ServerRulesRoles.showNotification(key, args)
-    if g_currentMission == nil or g_currentMission.addIngameNotification == nil then
+    if g_currentMission == nil then
         return
     end
     local text = ServerRulesRoles.text(key, unpack(args or {}))
-    g_currentMission:addIngameNotification(FSBaseMission.INGAME_NOTIFICATION_CRITICAL or 1, text)
+    if g_currentMission.addIngameNotification ~= nil then
+        g_currentMission:addIngameNotification(FSBaseMission.INGAME_NOTIFICATION_CRITICAL or 1, text)
+    end
+    if ServerRulesRoles.DIALOG_KEYS[key] and InfoDialog ~= nil then
+        -- shown a moment later, so it replaces the game's own (more general) message
+        table.insert(ServerRulesRoles.dialogQueue, {text = text, at = (g_time or 0) + 700})
+    end
+end
+
+function ServerRulesRoles.updateClient()
+    local q = ServerRulesRoles.dialogQueue
+    if #q == 0 or g_time == nil then
+        return
+    end
+    if g_time >= q[1].at then
+        local entry = table.remove(q, 1)
+        pcall(InfoDialog.show, entry.text)
+    end
 end
 
 ---------------------------------------------------------------------------------------------------

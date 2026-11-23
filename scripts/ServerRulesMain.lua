@@ -221,6 +221,11 @@ function ServerRules.onRulesChunk(revision, chunkIndex, chunkCount, text)
         local points, productions, storage = ServerRulesProductions.applyAll(c.rules)
         ServerRules.log("Produktionsregeln vom Server uebernommen (Stand %d): %d Gebaeude, %d Rezepte, %d Lagerplaetze geaendert",
             revision, points, productions, storage)
+        local names = {}
+        for _, role in ipairs(c.rules.roles or {}) do
+            table.insert(names, tostring(role.name))
+        end
+        ServerRules.log("Rollen vom Server: %d (%s), Sprache %s", #names, table.concat(names, ", "), tostring(g_languageShortName))
     end
 end
 
@@ -330,6 +335,9 @@ end
 function listener:update(dt)
     if not ServerRules.isInitialized then
         return
+    end
+    if g_client ~= nil then
+        ServerRulesRoles.updateClient()
     end
     if g_server ~= nil then
         ServerRulesRoles.update(dt)
