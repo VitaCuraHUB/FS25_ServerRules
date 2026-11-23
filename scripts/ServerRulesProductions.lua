@@ -94,6 +94,7 @@ function ServerRulesProductions.applyToPoint(pp, rules)
     -- reset
     for _, production in ipairs(pp.productions) do
         local po = o.productions[production]
+        production.serverRulesDisabled = nil
         if po ~= nil then
             if po.cyclesPerMinute ~= nil then
                 setCycles(production, po.cyclesPerMinute * 60)
@@ -140,6 +141,11 @@ function ServerRulesProductions.applyToPoint(pp, rules)
                 setCycles(production, best.cyclesPerHour)
             elseif best.cyclesFactor ~= nil then
                 setCycles(production, origCph * best.cyclesFactor)
+            end
+            if best.disabled then
+                -- recipe switched off: no cycles, cannot be activated (see setProductionState hook)
+                setCycles(production, 0)
+                production.serverRulesDisabled = true
             end
             local origCost = (po.costsPerActiveMinute or 0) * 60
             if best.costsPerHour ~= nil then
@@ -397,4 +403,64 @@ if ProductionPoint ~= nil and ProductionPoint.setOutputDistributionMode ~= nil t
     end)
 else
     ServerRules.log("Warnung: ProductionPoint.setOutputDistributionMode fehlt - Direktverkauf-Regel inaktiv")
+end
+
+-- A switched-off recipe cannot be activated (server and client)
+if ProductionPoint ~= nil and ProductionPoint.setProductionState ~= nil then
+    ProductionPoint.setProductionState = Utils.overwrittenFunction(ProductionPoint.setProductionState, function(self, superFunc, productionId, isEnabled, ...)
+        if isEnabled and self.productionsIdToObj ~= nil then
+            local production = self.productionsIdToObj[productionId]
+            if production ~= nil and production.serverRulesDisabled then
+                isEnabled = false
+            end
+        end
+        return superFunc(self, productionId, isEnabled, ...)
+    end)
+else
+    ServerRules.log("Warnung: ProductionPoint.setProductionState fehlt - abgeschaltete Rezepte lassen sich trotzdem starten")
+end
+
+---Server, every 10 s: forced "sell directly" and switched-off recipes really in effect?
+-- (the game may reset output modes when a bought building is finalized; changes here go through
+-- the game's own events, so all players see them)
+ServerRulesProductions.checkTimer = 0
+ServerRulesProductions.checkLogCount = 0
+
+function ServerRulesProductions.update(dt)
+    if g_server == nil then
+        return
+    end
+    ServerRulesProductions.checkTimer = ServerRulesProductions.checkTimer + dt
+    if ServerRulesProductions.checkTimer < 10000 then
+        return
+    end
+    ServerRulesProductions.checkTimer = 0
+    local forced = ServerRulesProductions.forcedDirectSell
+    for _, pp in ipairs(ServerRulesProductions.points) do
+        if not pp.isDeleted and pp.productions ~= nil then
+            for _, production in ipairs(pp.productions) do
+                if next(forced) ~= nil and ProductionPoint.OUTPUT_MODE ~= nil and pp.setOutputDistributionMode ~= nil then
+                    for _, output in ipairs(production.outputs or {}) do
+                        local ft = output.type
+                        if ft ~= nil and forced[ft] and (pp.outputFillTypeIdsDirectSell == nil or not pp.outputFillTypeIdsDirectSell[ft]) then
+                            local ok, err = pcall(pp.setOutputDistributionMode, pp, ft, ProductionPoint.OUTPUT_MODE.DIRECT_SELL)
+                            if ServerRulesProductions.checkLogCount < 20 then
+                                ServerRulesProductions.checkLogCount = ServerRulesProductions.checkLogCount + 1
+                                ServerRules.log("Direktverkauf gesetzt: %s (%s) %s", tostring(ServerRulesProductions.getPointKey(pp)), tostring(ft), ok and "ok" or tostring(err))
+                            end
+                        end
+                    end
+                end
+                if production.serverRulesDisabled and pp.activeProductions ~= nil and pp.setProductionState ~= nil then
+                    for _, active in ipairs(pp.activeProductions) do
+                        if active == production then
+                            pcall(pp.setProductionState, pp, production.id, false)
+                            ServerRules.log("Abgeschaltetes Rezept gestoppt: %s %s", tostring(ServerRulesProductions.getPointKey(pp)), tostring(production.id))
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
 end

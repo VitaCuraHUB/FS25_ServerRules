@@ -250,6 +250,7 @@ function ServerRulesSettings.loadProductionRules(xml, settings, warnings)
             costsFactor = readNumber(xml, key .. "#costsFactor", warnings, name),
             inputFactor = readNumber(xml, key .. "#inputFactor", warnings, name),
             outputFactor = readNumber(xml, key .. "#outputFactor", warnings, name),
+            disabled = getXMLBool(xml, key .. "#disabled") == true,
             inputs = {},
             outputs = {}
         }
@@ -397,7 +398,7 @@ function ServerRulesSettings.serializeRules(settings)
     local lines = {}
     for _, r in ipairs(settings.productionRules or {}) do
         table.insert(lines, table.concat({"P", enc(r.order), enc(r.item), enc(r.mod), enc(r.id), enc(r.cyclesPerHour), enc(r.cyclesFactor),
-            enc(r.costsPerHour), enc(r.costsFactor), enc(r.inputFactor), enc(r.outputFactor), encMap(r.inputs), encMap(r.outputs), enc(r.score)}, SEP))
+            enc(r.costsPerHour), enc(r.costsFactor), enc(r.inputFactor), enc(r.outputFactor), encMap(r.inputs), encMap(r.outputs), enc(r.score), r.disabled and "1" or ""}, SEP))
     end
     for _, r in ipairs(settings.storageRules or {}) do
         table.insert(lines, table.concat({"S", enc(r.order), enc(r.item), enc(r.mod), enc(r.fillType), enc(r.capacity), enc(r.capacityFactor), enc(r.score)}, SEP))
@@ -418,7 +419,7 @@ function ServerRulesSettings.deserializeRules(text)
         if f[1] == "P" then
             table.insert(rules.productionRules, {order = decNum(f[2]) or 0, item = dec(f[3]), mod = dec(f[4]), id = dec(f[5]),
                 cyclesPerHour = decNum(f[6]), cyclesFactor = decNum(f[7]), costsPerHour = decNum(f[8]), costsFactor = decNum(f[9]),
-                inputFactor = decNum(f[10]), outputFactor = decNum(f[11]), inputs = decMap(f[12]), outputs = decMap(f[13]), score = decNum(f[14]) or 0})
+                inputFactor = decNum(f[10]), outputFactor = decNum(f[11]), inputs = decMap(f[12]), outputs = decMap(f[13]), score = decNum(f[14]) or 0, disabled = f[15] == "1"})
         elseif f[1] == "S" then
             table.insert(rules.storageRules, {order = decNum(f[2]) or 0, item = dec(f[3]), mod = dec(f[4]), fillType = dec(f[5]),
                 capacity = decNum(f[6]), capacityFactor = decNum(f[7]), score = decNum(f[8]) or 0})

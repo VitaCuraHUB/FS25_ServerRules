@@ -330,6 +330,7 @@ function listener:update(dt)
     end
     if g_server ~= nil then
         ServerRulesRoles.update(dt)
+        ServerRulesProductions.update(dt)
         local interval = ServerRules.settings ~= nil and ServerRules.settings.reloadInterval or 60
         if interval > 0 then
             ServerRules.reloadTimer = ServerRules.reloadTimer + dt
