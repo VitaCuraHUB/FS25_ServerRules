@@ -101,6 +101,32 @@ keeps its contents across restarts. Production runs on the server; clients get t
 display. Selling price factors are applied by the server (the price clients see comes from the
 server – to be confirmed in a client test).
 
+### Roles (stage 3, untested)
+
+```xml
+<roles mode="block">   <!-- block = forbid; warn = only a message and a log line -->
+    <role id="contractor" name="Contractor" description="Transport and contracts, no harvesting">
+        <buy default="allow">           <!-- allow|deny, then exceptions; same criteria as price rules -->
+            <rule action="deny" category="harvesters"/>
+            <rule action="deny" category="productionPoints"/>
+        </buy>
+        <missions default="allow">
+            <rule action="deny" type="harvest"/>   <!-- part of the mission type name -->
+        </missions>
+        <loan max="200000"/>           <!-- more is paid back automatically -->
+        <sell default="allow">          <!-- unloading/selling at selling points the farm does not own -->
+            <rule action="deny" fillType="WHEAT"/>
+        </sell>
+    </role>
+</roles>
+```
+
+Which farm has which role is set **in game**: press **Ctrl+R**. Players see their role, their rules
+and all farms. The admin (logged in as admin in the game's multiplayer menu) chooses a farm and its
+role, or reloads the settings. The assignment is stored in the savegame
+(`serverRules-roles.xml`). Role rules apply to everybody (also the admin); only buying "free of
+charge" is reserved for the admin. Purchases, contracts and selling are checked by the server.
+
 ### Generated rules
 
 The server also reads `serverRules-auto.xml` from the same folder (e.g. written by a balancing

@@ -128,6 +128,13 @@ end
 
 function ServerRulesRequestSyncEvent:run(connection)
     if connection ~= nil and not connection:getIsServer() and g_server ~= nil then
+        -- at most one full snapshot per connection every 5 s
+        ServerRules.lastRequest = ServerRules.lastRequest or setmetatable({}, {__mode = "k"})
+        local now = g_time or 0
+        if ServerRules.lastRequest[connection] ~= nil and now - ServerRules.lastRequest[connection] < 5000 then
+            return
+        end
+        ServerRules.lastRequest[connection] = now
         ServerRules.sendSnapshot(connection)
     end
 end

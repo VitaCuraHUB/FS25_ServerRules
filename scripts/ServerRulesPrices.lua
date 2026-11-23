@@ -121,6 +121,21 @@ local function ruleMatches(rule, storeItem, info)
     return true
 end
 
+---Properties of a store item that rules can match on (also used by the role purchase rules)
+function ServerRulesPrices.getItemInfo(storeItem)
+    return {
+        key = ServerRules.getItemKey(storeItem),
+        mod = storeItem.customEnvironment ~= nil and string.lower(storeItem.customEnvironment) or nil,
+        source = getSourceName(storeItem),
+        species = getSpeciesName(storeItem),
+        brand = getBrandName(storeItem)
+    }
+end
+
+function ServerRulesPrices.matchesItem(rule, storeItem, info)
+    return ruleMatches(rule, storeItem, info)
+end
+
 local function isBetter(rule, best)
     if best == nil then
         return true

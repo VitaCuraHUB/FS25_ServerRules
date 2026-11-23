@@ -2,5 +2,6 @@
 <l10n>
     <texts>
         <text name="serverRules_title" text="Server Rules"/>
+        <text name="input_SERVERRULES_MENU" text="Server rules (roles)"/>
     </texts>
 </l10n>

@@ -110,7 +110,8 @@ function ServerRulesSettings.loadAll(dir)
     for _, src in ipairs({auto.fillTypeRules or {}, manual.fillTypeRules or {}}) do
         for _, r in ipairs(src) do
             if byName[r.name] ~= nil then
-                list[byName[r.name]] = r
+                local old = list[byName[r.name]]
+                list[byName[r.name]] = {name = r.name, priceFactor = r.priceFactor or old.priceFactor, forceDirectSell = r.forceDirectSell or old.forceDirectSell}
             else
                 table.insert(list, r)
                 byName[r.name] = #list
@@ -118,6 +119,12 @@ function ServerRulesSettings.loadAll(dir)
         end
     end
     merged.fillTypeRules = list
+    -- roles only come from the manual file; use generated ones only if the manual file has none
+    if #(manual.roles or {}) == 0 and auto.roles ~= nil and #auto.roles > 0 then
+        merged.roles = auto.roles
+        merged.rolesById = auto.rolesById
+        merged.rolesMode = auto.rolesMode
+    end
     return merged, warnings
 end
 
@@ -199,6 +206,9 @@ function ServerRulesSettings.load(path)
     end
 
     ServerRulesSettings.loadProductionRules(xml, settings, warnings)
+    if ServerRulesRoles ~= nil then
+        ServerRulesRoles.loadFromXML(xml, settings, warnings)
+    end
 
     delete(xml)
     return settings, warnings
@@ -395,6 +405,9 @@ function ServerRulesSettings.serializeRules(settings)
     for _, r in ipairs(settings.fillTypeRules or {}) do
         table.insert(lines, table.concat({"F", enc(r.name), enc(r.priceFactor), r.forceDirectSell and "1" or ""}, SEP))
     end
+    if ServerRulesRoles ~= nil then
+        ServerRulesRoles.serialize(settings, lines)
+    end
     return table.concat(lines, "\n")
 end
 
@@ -411,6 +424,8 @@ function ServerRulesSettings.deserializeRules(text)
                 capacity = decNum(f[6]), capacityFactor = decNum(f[7]), score = decNum(f[8]) or 0})
         elseif f[1] == "F" then
             table.insert(rules.fillTypeRules, {name = dec(f[2]), priceFactor = decNum(f[3]), forceDirectSell = f[4] == "1"})
+        elseif ServerRulesRoles ~= nil and string.sub(f[1] or "", 1, 1) == "R" then
+            ServerRulesRoles.deserializeLine(rules, f)
         end
     end
     return rules

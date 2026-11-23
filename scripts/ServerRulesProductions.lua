@@ -346,7 +346,9 @@ local function onProductionPointLoaded(pp)
         end
     end
     if rules ~= nil then
-        ServerRulesProductions.applyToPoint(pp, rules)
+        if g_server ~= nil then
+            ServerRulesProductions.applyToPoint(pp, rules)
+        end
         if g_fillTypeManager ~= nil and next(ServerRulesProductions.forcedDirectSell) == nil then
             ServerRulesProductions.setForcedDirectSell(rules)
         end

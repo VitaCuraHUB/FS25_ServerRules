@@ -177,6 +177,7 @@ function ServerRules.sendSnapshot(connection)
     for i, text in ipairs(ruleChunks) do
         connection:sendEvent(ServerRulesRulesEvent.new(ServerRules.revision, i, #ruleChunks, text))
     end
+    ServerRulesRoles.sendState(connection)
 end
 
 function ServerRules.broadcastSnapshot()
@@ -281,19 +282,29 @@ end
 
 ---Everything incl. the savegame placeables is loaded (production points load after loadMission00Finished)
 function ServerRules.onAllLoaded()
-    if g_server == nil or ServerRules.settings == nil then
+    if g_server == nil then
+        return
+    end
+    -- roles first: even with a broken settings file the assignment must not get lost
+    local n = ServerRulesRoles.load()
+    if ServerRules.settings == nil then
+        ServerRules.log("Rollen: %d Hoefe mit Rolle (Einstellungen fehlen oder sind fehlerhaft)", n)
         return
     end
     local s = ServerRules.settings
     local points, productions, storage = ServerRulesProductions.applyAll(s)
     ServerRules.log("Spielstand geladen: %d Produktionsstaetten, davon %d Gebaeude angepasst (%d Rezepte, %d Lagerplaetze)",
         #ServerRulesProductions.points, points, productions, storage)
+    ServerRules.log("Rollen: %d definiert (Modus %s), %d Hoefe mit Rolle", #(s.roles or {}), tostring(s.rolesMode), n)
+    ServerRulesRoles.logDiagnostics()
     if s.writeCheckFile then
         ServerRules.writeCheckFile()
     end
 end
 
 function listener:deleteMap()
+    ServerRulesRoles.assignment = {}
+    ServerRulesRoles.loaded = false
     ServerRulesPrices.resetAll()
     ServerRulesProductions.applyAll(nil)
     ServerRulesProductions.points = {}
@@ -318,6 +329,7 @@ function listener:update(dt)
         return
     end
     if g_server ~= nil then
+        ServerRulesRoles.update(dt)
         local interval = ServerRules.settings ~= nil and ServerRules.settings.reloadInterval or 60
         if interval > 0 then
             ServerRules.reloadTimer = ServerRules.reloadTimer + dt
@@ -372,4 +384,20 @@ if FSBaseMission ~= nil and FSBaseMission.onConnectionFinishedLoading ~= nil the
     end)
 else
     ServerRules.log("Warnung: FSBaseMission.onConnectionFinishedLoading fehlt - Clients fragen die Werte selbst an")
+end
+
+-- roles: purchase/contract/selling checks, saving the assignment with the savegame
+ServerRulesRoles.installHooks()
+
+if FSCareerMissionInfo ~= nil and FSCareerMissionInfo.saveToXMLFile ~= nil then
+    FSCareerMissionInfo.saveToXMLFile = Utils.appendedFunction(FSCareerMissionInfo.saveToXMLFile, function(missionInfo, ...)
+        if g_server ~= nil and ServerRules.isInitialized then
+            local ok, err = pcall(ServerRulesRoles.save)
+            if not ok then
+                ServerRules.log("FEHLER beim Speichern der Rollen: %s", tostring(err))
+            end
+        end
+    end)
+else
+    ServerRules.log("Warnung: FSCareerMissionInfo.saveToXMLFile fehlt - Rollen werden nur bei Aenderung gespeichert")
 end
