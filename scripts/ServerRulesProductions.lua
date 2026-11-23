@@ -241,7 +241,7 @@ function ServerRulesProductions.enforceDirectSell(pp)
     for _, production in ipairs(pp.productions) do
         for _, output in ipairs(production.outputs or {}) do
             local ft = output.type
-            if ft ~= nil and not done[ft] and ServerRulesProductions.forcedDirectSell[ft] then
+            if ft ~= nil and not output.sellDirectly and not done[ft] and ServerRulesProductions.forcedDirectSell[ft] then
                 done[ft] = true
                 if pp.outputFillTypeIdsDirectSell == nil or not pp.outputFillTypeIdsDirectSell[ft] then
                     local setter = originalSetOutputMode or pp.setOutputDistributionMode
@@ -329,6 +329,19 @@ function ServerRulesProductions.writeCheck(xml, rootKey)
                 setXMLString(xml, base .. "#storage", table.concat(caps, ","))
                 setXMLFloat(xml, base .. "#storageTotal", pp.storage.capacity or 0)
             end
+            local ds = {}
+            for ft, v in pairs(pp.outputFillTypeIdsDirectSell or {}) do
+                table.insert(ds, fillTypeName(ft) .. "=" .. tostring(v))
+            end
+            table.sort(ds)
+            setXMLString(xml, base .. "#directSell", table.concat(ds, ","))
+            local dis = {}
+            for _, production in ipairs(pp.productions or {}) do
+                if production.serverRulesDisabled then
+                    table.insert(dis, tostring(production.id))
+                end
+            end
+            setXMLString(xml, base .. "#disabled", table.concat(dis, ","))
             i = i + 1
         end
     end
@@ -438,11 +451,13 @@ function ServerRulesProductions.update(dt)
     local forced = ServerRulesProductions.forcedDirectSell
     for _, pp in ipairs(ServerRulesProductions.points) do
         if not pp.isDeleted and pp.productions ~= nil then
+            local doneFt = {}
             for _, production in ipairs(pp.productions) do
                 if next(forced) ~= nil and ProductionPoint.OUTPUT_MODE ~= nil and pp.setOutputDistributionMode ~= nil then
                     for _, output in ipairs(production.outputs or {}) do
                         local ft = output.type
-                        if ft ~= nil and forced[ft] and (pp.outputFillTypeIdsDirectSell == nil or not pp.outputFillTypeIdsDirectSell[ft]) then
+                        if ft ~= nil and not output.sellDirectly and forced[ft] and not doneFt[ft] and (pp.outputFillTypeIdsDirectSell == nil or not pp.outputFillTypeIdsDirectSell[ft]) then
+                            doneFt[ft] = true
                             local ok, err = pcall(pp.setOutputDistributionMode, pp, ft, ProductionPoint.OUTPUT_MODE.DIRECT_SELL)
                             if ServerRulesProductions.checkLogCount < 20 then
                                 ServerRulesProductions.checkLogCount = ServerRulesProductions.checkLogCount + 1

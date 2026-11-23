@@ -297,6 +297,9 @@ function ServerRules.onAllLoaded()
         #ServerRulesProductions.points, points, productions, storage)
     ServerRules.log("Rollen: %d definiert (Modus %s), %d Hoefe mit Rolle", #(s.roles or {}), tostring(s.rolesMode), n)
     ServerRulesRoles.logDiagnostics()
+    -- run the production check once now (an empty dedicated server is paused and does not update)
+    ServerRulesProductions.checkTimer = 10000
+    ServerRulesProductions.update(0)
     if s.writeCheckFile then
         ServerRules.writeCheckFile()
     end

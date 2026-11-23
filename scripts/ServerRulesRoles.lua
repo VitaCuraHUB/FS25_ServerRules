@@ -747,7 +747,7 @@ function ServerRulesRoles.installHooks()
                         ServerRules.log("Auftrag gesperrt: Hof %d (%s) Typ %s", farmId, role.id, typeName)
                         ServerRulesRoles.notifyFarm(farmId, "missionDenied", role.name)
                         if MissionStartState ~= nil then
-                            return MissionStartState.NO_ACCESS or MissionStartState.CANNOT_BE_STARTED_NOW
+                            return MissionStartState.NO_PERMISSION or MissionStartState.NO_ACCESS or MissionStartState.CANNOT_BE_STARTED_NOW
                         end
                         return nil
                     end
