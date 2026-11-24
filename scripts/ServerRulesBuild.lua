@@ -101,6 +101,9 @@ function ServerRulesBuild.logDiagnostics()
         table.sort(names)
         ServerRules.log("Diagnose Bauen: ConstructionBrush.ERROR = %s", table.concat(names, ","))
     end
+    for _, s in ipairs(ServerRulesBuild.SCAN or {}) do
+        ServerRulesBuild.scanFunction(s[1], ServerRulesBuild.originals[s[1]])
+    end
     ServerRules.log("Diagnose Bauen: Modus build#anywhere = %s, %s Haken gesetzt (erwartet 8)", getMode(), tostring(ServerRulesBuild.hookCount))
 end
 
@@ -125,13 +128,73 @@ local function hookLand(name)
     if FarmlandManager ~= nil and FarmlandManager[name] ~= nil then
         FarmlandManager[name] = Utils.overwrittenFunction(FarmlandManager[name], function(self, superFunc, ...)
             if ServerRulesBuild.ignoreLand > 0 then
+                ServerRulesBuild.noteCheck(name, true, true)
                 return true
             end
-            return superFunc(self, ...)
+            local result = superFunc(self, ...)
+            ServerRulesBuild.noteCheck(name, result, false)
+            return result
         end)
         return true
     end
     return false
+end
+
+-- original functions (before our hooks), for the diagnosis below
+ServerRulesBuild.originals = {}
+local SCAN = {
+    {"ConstructionBrush.verifyAccess (Kontrolle)", function() return ConstructionBrush and ConstructionBrush.verifyAccess end},
+    {"ConstructionBrushPlaceable.verifyPlacement", function() return ConstructionBrushPlaceable and ConstructionBrushPlaceable.verifyPlacement end},
+    {"BuyPlaceableEvent.run", function() return BuyPlaceableEvent and BuyPlaceableEvent.run end},
+    {"BuyPlaceableEvent.onPlaceableBoughtCallback", function() return BuyPlaceableEvent and BuyPlaceableEvent.onPlaceableBoughtCallback end},
+    {"BuyPlaceableData.buy", function() return BuyPlaceableData and BuyPlaceableData.buy end},
+    {"LandscapingSculptEvent.run", function() return LandscapingSculptEvent and LandscapingSculptEvent.run end},
+    {"Landscaping.sculpt", function() return Landscaping and Landscaping.sculpt end},
+    {"Landscaping.onSculptingValidated", function() return Landscaping and Landscaping.onSculptingValidated end},
+    {"Landscaping.isModificationAreaOnOwnedLand", function() return Landscaping and Landscaping.isModificationAreaOnOwnedLand end}
+}
+local KEYWORDS = {"Owned", "OwnedBy", "farmland", "Farmland", "verifyAccess", "verifyPlacement", "hasPlayerPermission",
+    "isModificationAreaOnOwnedLand", "canFarmAccess", "getCanAccessLand", "NO_PERMISSION", "LAND_UNOWNED", "sculpt", "Landscaping"}
+
+---Which ownership related names does a game function use? (string constants of the compiled function)
+function ServerRulesBuild.scanFunction(name, fn)
+    if type(fn) ~= "function" then
+        ServerRules.log("Diagnose Besitz: %s fehlt", name)
+        return
+    end
+    if string.dump == nil then
+        ServerRules.log("Diagnose Besitz: string.dump nicht verfuegbar")
+        return
+    end
+    local ok, code = pcall(string.dump, fn)
+    if not ok or type(code) ~= "string" then
+        ServerRules.log("Diagnose Besitz: %s nicht lesbar (%s)", name, tostring(code))
+        return
+    end
+    local found = {}
+    for _, k in ipairs(KEYWORDS) do
+        if string.find(code, k, 1, true) ~= nil then
+            table.insert(found, k)
+        end
+    end
+    ServerRules.log("Diagnose Besitz: %s (%d Bytes) nutzt: %s", name, string.len(code), #found > 0 and table.concat(found, ",") or "-")
+end
+
+ServerRulesBuild.SCAN = SCAN
+-- captured when this file is loaded: before any hook of this mod (roles hooks come later from Main)
+for _, s in ipairs(SCAN) do
+    local ok, fn = pcall(s[2])
+    ServerRulesBuild.originals[s[1]] = ok and fn or nil
+end
+
+-- diagnosis (server): does the server ask for land ownership while a player event runs?
+ServerRulesBuild.contextName = nil
+ServerRulesBuild.contextChecks = nil
+function ServerRulesBuild.noteCheck(name, result, relaxed)
+    if g_server ~= nil and ServerRulesBuild.contextName ~= nil and ServerRulesBuild.contextChecks ~= nil then
+        local c = ServerRulesBuild.contextChecks
+        c[name] = string.format("%s%s", tostring(result), relaxed and " (gelockert)" or "")
+    end
 end
 
 function ServerRulesBuild.installHooks()
@@ -166,16 +229,40 @@ function ServerRulesBuild.installHooks()
         if cls ~= nil and cls.run ~= nil then
             cls.run = Utils.overwrittenFunction(cls.run, function(self, superFunc, connection, ...)
                 local old = ServerRulesBuild.context
+                local oldName, oldChecks = ServerRulesBuild.contextName, ServerRulesBuild.contextChecks
                 ServerRulesBuild.context = connection
+                ServerRulesBuild.contextName = cls == BuyPlaceableEvent and "Kauf/Platzieren" or "Planieren"
+                ServerRulesBuild.contextChecks = {}
                 local allowed = g_server ~= nil and connection ~= nil and not connection:getIsServer() and ServerRulesBuild.isAllowedConnection(connection)
                 local ok, a, b, c = pcall(withLand, allowed, superFunc, self, connection, ...)
+                if g_server ~= nil and connection ~= nil and not connection:getIsServer() then
+                    local parts = {}
+                    for k, v in pairs(ServerRulesBuild.contextChecks or {}) do
+                        table.insert(parts, k .. "=" .. v)
+                    end
+                    ServerRules.log("Diagnose Besitz: Server-Event %s von Hof %s (erlaubt=%s): Besitz-Abfragen: %s", ServerRulesBuild.contextName,
+                        tostring(ServerRulesRoles.getFarmIdOfConnection(connection)), tostring(allowed), #parts > 0 and table.concat(parts, ", ") or "keine")
+                end
                 ServerRulesBuild.context = old
+                ServerRulesBuild.contextName, ServerRulesBuild.contextChecks = oldName, oldChecks
                 if not ok then
                     error(a)
                 end
                 return a, b, c
             end)
             n = n + 1
+        end
+    end
+    for _, cls in ipairs({BuyPlaceableEvent, LandscapingSculptEvent}) do
+        if cls ~= nil and cls.newServerToClient ~= nil then
+            local orig = cls.newServerToClient
+            local label = cls == BuyPlaceableEvent and "Kauf/Platzieren" or "Planieren"
+            cls.newServerToClient = function(state, ...)
+                if g_server ~= nil then
+                    ServerRules.log("Diagnose Besitz: Antwort %s an Spieler: Status %s", label, tostring(state))
+                end
+                return orig(state, ...)
+            end
         end
     end
     ServerRulesBuild.hookCount = n
@@ -205,6 +292,7 @@ function ServerRulesBuild.runPlacementTest()
         local want = string.lower(getXMLString(xml, key .. "#xml") or "")
         local x = getXMLFloat(xml, key .. "#x") or 0
         local z = getXMLFloat(xml, key .. "#z") or 0
+        local farm = getXMLInt(xml, key .. "#farm") or 0
         local storeItem = nil
         for _, si in ipairs(g_storeManager:getItems()) do
             if want ~= "" and si.xmlFilenameLower ~= nil and string.find(si.xmlFilenameLower, want, 1, true) ~= nil then
@@ -220,7 +308,9 @@ function ServerRulesBuild.runPlacementTest()
             local y = getTerrainHeightAtWorldPos(g_currentMission.terrainRootNode, x, 0, z)
             local data = PlaceableLoadingData.new()
             data:setStoreItem(storeItem)
-            data:setOwnerFarmId(0)
+            data:setOwnerFarmId(farm)
+            local landOwner = g_farmlandManager ~= nil and g_farmlandManager:getOwnerIdAtWorldPosition(x, z) or "?"
+            ServerRules.log("Test: Platz %.0f/%.0f, Land gehoert Hof %s, Gebaeude fuer Hof %d", x, z, tostring(landOwner), farm)
             data:setPosition(x, y, z)
             data:setRotation(0, 0, 0)
             if data.setIsSaved ~= nil then
