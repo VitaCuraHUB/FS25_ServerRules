@@ -45,6 +45,7 @@ function ServerRules.reloadSettings(isStart)
     local applied, unknown = ServerRulesPrices.applyOverrides(overrides)
     ServerRules.log("Werte geladen (Stand %d): %d Preisregeln, %d Artikel geaendert, %d Regeln ohne Treffer, %d unbekannt",
         ServerRules.revision, #settings.priceRules, applied, unused, unknown)
+    ServerRulesVehicles.rulesChanged()
     local points, productions, storage = ServerRulesProductions.applyAll(settings)
     local unknownFillTypes = ServerRulesProductions.setFillTypeFactors(settings)
     ServerRules.log("Produktionen: %d Regeln, %d Lagerregeln -> %d Gebaeude, %d Rezepte, %d Lagerplaetze geaendert (von %d Produktionsstaetten); Warenpreise: %d Regeln, %d unbekannt",
@@ -300,6 +301,7 @@ function ServerRules.onRulesChunk(revision, chunkIndex, chunkCount, text)
         c.rules = ServerRulesSettings.deserializeRules(table.concat(parts))
         c.rulesRevision = revision
         c.rulesPending = nil
+        ServerRulesVehicles.rulesChanged()
         local points, productions, storage = ServerRulesProductions.applyAll(c.rules)
         ServerRules.log("Produktionsregeln vom Server uebernommen (Stand %d): %d Gebaeude, %d Rezepte, %d Lagerplaetze geaendert",
             revision, points, productions, storage)
@@ -429,6 +431,7 @@ function listener:update(dt)
     if g_client ~= nil then
         ServerRulesRoles.updateClient()
     end
+    ServerRulesVehicles.update(dt)
     if g_server ~= nil then
         ServerRulesRoles.update(dt)
         ServerRulesProductions.update(dt)

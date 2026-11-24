@@ -92,7 +92,7 @@ function ServerRulesSettings.loadAll(dir)
         return auto, warnings
     end
     local merged = manual
-    for _, listName in ipairs({"priceRules", "productionRules", "storageRules"}) do
+    for _, listName in ipairs({"priceRules", "productionRules", "storageRules", "vehicleRules"}) do
         local list = {}
         for _, r in ipairs(auto[listName] or {}) do
             table.insert(list, r)
@@ -209,12 +209,50 @@ function ServerRulesSettings.load(path)
     end
 
     ServerRulesSettings.loadProductionRules(xml, settings, warnings)
+    ServerRulesSettings.loadVehicleRules(xml, settings, warnings)
     if ServerRulesRoles ~= nil then
         ServerRulesRoles.loadFromXML(xml, settings, warnings)
     end
 
     delete(xml)
     return settings, warnings
+end
+
+-- Vehicles (E-047): limit unrealistic values, prices stay as they are
+-- <vehicles>
+--   <vehicle item="FS25_X/trailer.xml" maxCapacity="59400" maxSpeed="40"/>   capacity in l (bales: pieces), speed km/h
+--   <vehicle mod="FS25_X" maxCapacity="32000"/>
+-- </vehicles>
+-- item beats mod; fuel tanks (diesel, AdBlue, air, electric, methane) are never changed.
+function ServerRulesSettings.loadVehicleRules(xml, settings, warnings)
+    settings.vehicleRules = {}
+    local i = 0
+    while true do
+        local key = string.format("serverRules.vehicles.vehicle(%d)", i)
+        if not hasXMLProperty(xml, key) then
+            break
+        end
+        local name = string.format("Fahrzeugregel %d", i + 1)
+        local rule = {
+            order = i,
+            item = ServerRules.normalizeKey(readString(xml, key .. "#item")),
+            mod = readString(xml, key .. "#mod"),
+            maxCapacity = readNumber(xml, key .. "#maxCapacity", warnings, name),
+            maxSpeed = readNumber(xml, key .. "#maxSpeed", warnings, name)
+        }
+        if rule.mod ~= nil then
+            rule.mod = string.lower(rule.mod)
+        end
+        if rule.item == nil and rule.mod == nil then
+            table.insert(warnings, name .. ": item oder mod fehlt - Regel ignoriert")
+        elseif rule.maxCapacity == nil and rule.maxSpeed == nil then
+            table.insert(warnings, name .. ": kein Wert (maxCapacity, maxSpeed) - Regel ignoriert")
+        else
+            rule.score = (rule.item ~= nil and 1000 or 0) + (rule.mod ~= nil and 100 or 0)
+            table.insert(settings.vehicleRules, rule)
+        end
+        i = i + 1
+    end
 end
 
 -- Productions (stage 2):
@@ -406,6 +444,9 @@ function ServerRulesSettings.serializeRules(settings)
     for _, r in ipairs(settings.storageRules or {}) do
         table.insert(lines, table.concat({"S", enc(r.order), enc(r.item), enc(r.mod), enc(r.fillType), enc(r.capacity), enc(r.capacityFactor), enc(r.score)}, SEP))
     end
+    for _, r in ipairs(settings.vehicleRules or {}) do
+        table.insert(lines, table.concat({"V", enc(r.order), enc(r.item), enc(r.mod), enc(r.maxCapacity), enc(r.maxSpeed), enc(r.score)}, SEP))
+    end
     for _, r in ipairs(settings.fillTypeRules or {}) do
         table.insert(lines, table.concat({"F", enc(r.name), enc(r.priceFactor), r.forceDirectSell and "1" or ""}, SEP))
     end
@@ -416,7 +457,7 @@ function ServerRulesSettings.serializeRules(settings)
 end
 
 function ServerRulesSettings.deserializeRules(text)
-    local rules = {productionRules = {}, storageRules = {}, fillTypeRules = {}}
+    local rules = {productionRules = {}, storageRules = {}, fillTypeRules = {}, vehicleRules = {}}
     for line in string.gmatch(text or "", "[^\n]+") do
         local f = split(line)
         if f[1] == "P" then
@@ -426,6 +467,9 @@ function ServerRulesSettings.deserializeRules(text)
         elseif f[1] == "S" then
             table.insert(rules.storageRules, {order = decNum(f[2]) or 0, item = dec(f[3]), mod = dec(f[4]), fillType = dec(f[5]),
                 capacity = decNum(f[6]), capacityFactor = decNum(f[7]), score = decNum(f[8]) or 0})
+        elseif f[1] == "V" then
+            table.insert(rules.vehicleRules, {order = decNum(f[2]) or 0, item = dec(f[3]), mod = dec(f[4]), maxCapacity = decNum(f[5]),
+                maxSpeed = decNum(f[6]), score = decNum(f[7]) or 0})
         elseif f[1] == "F" then
             table.insert(rules.fillTypeRules, {name = dec(f[2]), priceFactor = decNum(f[3]), forceDirectSell = f[4] == "1"})
         elseif ServerRulesRoles ~= nil and string.sub(f[1] or "", 1, 1) == "R" then

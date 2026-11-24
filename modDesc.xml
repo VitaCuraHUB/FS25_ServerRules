@@ -34,6 +34,7 @@ Geplant: Rollen je Hof mit Regeln fuer Kaufen, Auftraege, Kredite und Verkauf.]]
         <sourceFile filename="scripts/ServerRulesRoles.lua"/>
         <sourceFile filename="scripts/ServerRulesMenu.lua"/>
         <sourceFile filename="scripts/ServerRulesBuild.lua"/>
+        <sourceFile filename="scripts/ServerRulesVehicles.lua"/>
         <sourceFile filename="scripts/ServerRulesMain.lua"/>
     </extraSourceFiles>
     <actions>
