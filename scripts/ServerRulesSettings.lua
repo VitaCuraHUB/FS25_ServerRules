@@ -125,6 +125,9 @@ function ServerRulesSettings.loadAll(dir)
         merged.rolesById = auto.rolesById
         merged.rolesMode = auto.rolesMode
     end
+    if (merged.buildAnywhere == nil or merged.buildAnywhere == "off") and auto.buildAnywhere ~= nil then
+        merged.buildAnywhere = auto.buildAnywhere
+    end
     return merged, warnings
 end
 

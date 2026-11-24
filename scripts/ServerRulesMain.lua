@@ -58,6 +58,84 @@ function ServerRules.reloadSettings(isStart)
     end
 end
 
+-- ages (months) at which the animal curves are sampled for the balance report
+local ANIMAL_AGES = {0, 3, 6, 12, 18, 24, 36, 60, 120}
+
+local function writeCurve(xml, key, curve)
+    if type(curve) ~= "table" or curve.get == nil then
+        return
+    end
+    for j, age in ipairs(ANIMAL_AGES) do
+        local ok, v = pcall(curve.get, curve, age)
+        if ok and type(v) == "number" then
+            setXMLFloat(xml, string.format("%s.value(%d)#age", key, j - 1), age)
+            setXMLFloat(xml, string.format("%s.value(%d)#v", key, j - 1), v)
+        end
+    end
+end
+
+local function fillTypeName(index)
+    if index == nil or g_fillTypeManager == nil then
+        return ""
+    end
+    return tostring(g_fillTypeManager:getFillTypeNameByIndex(index))
+end
+
+---Balance data: per animal sub type the input/output curves per age (read only, for the report)
+function ServerRules.writeAnimalData(xml, baseKey)
+    local as = g_currentMission ~= nil and g_currentMission.animalSystem or nil
+    if as == nil or as.getSubTypeByIndex == nil then
+        return 0
+    end
+    local n = 0
+    local index = 1
+    while index < 1000 do
+        local st = as:getSubTypeByIndex(index)
+        if st == nil then
+            break
+        end
+        local key = string.format("%s.subType(%d)", baseKey, n)
+        setXMLString(xml, key .. "#name", tostring(st.name))
+        local t = st.typeIndex ~= nil and as.getTypeByIndex ~= nil and as:getTypeByIndex(st.typeIndex) or nil
+        setXMLString(xml, key .. "#type", t ~= nil and tostring(t.name) or "")
+        if st.fillTypeIndex ~= nil then
+            setXMLString(xml, key .. "#fillType", fillTypeName(st.fillTypeIndex))
+        end
+        writeCurve(xml, key .. ".buyPrice", st.buyPrice)
+        writeCurve(xml, key .. ".sellPrice", st.sellPrice)
+        if type(st.input) == "table" then
+            for name, curve in pairs(st.input) do
+                writeCurve(xml, string.format("%s.input.%s", key, tostring(name)), curve)
+            end
+        end
+        if type(st.output) == "table" then
+            for name, out in pairs(st.output) do
+                local okey = string.format("%s.output.%s", key, tostring(name))
+                if type(out) == "table" and out.curve ~= nil then
+                    setXMLString(xml, okey .. "#fillType", fillTypeName(out.fillType))
+                    writeCurve(xml, okey, out.curve)
+                else
+                    writeCurve(xml, okey, out)
+                end
+            end
+        end
+        if n == 0 then
+            -- once: field names, so unknown structures can be found in the log
+            local names = {}
+            for k2, _ in pairs(st) do
+                table.insert(names, tostring(k2))
+            end
+            table.sort(names)
+            ServerRules.log("Tier-Untertyp Felder: %s", table.concat(names, ","))
+        end
+        n = n + 1
+        index = index + 1
+    end
+    setXMLInt(xml, baseKey .. "#count", n)
+    ServerRules.log("Tierdaten geschrieben: %d Untertypen", n)
+    return n
+end
+
 ---Writes the values that are really in effect now (read back from the store items) to
 -- modSettings/FS25_ServerRules/serverRules-check.xml, so the admin can verify them without a client.
 function ServerRules.writeCheckFile()
@@ -118,6 +196,10 @@ function ServerRules.writeCheckFile()
         k = k + 1
     end
     setXMLInt(xml, "serverRulesCheck.sellPrices#stations", #stations)
+    local okA, nA = pcall(ServerRules.writeAnimalData, xml, "serverRulesCheck.animals")
+    if not okA then
+        ServerRules.log("Warnung: Tierdaten nicht lesbar: %s", tostring(nA))
+    end
     saveXMLFile(xml)
     delete(xml)
     ServerRules.log("Kontrolldatei geschrieben: %s (%d Artikel, %d Produktionsgebaeude)", path, i, n)
@@ -302,6 +384,14 @@ function ServerRules.onAllLoaded()
         #ServerRulesProductions.points, points, productions, storage)
     ServerRules.log("Rollen: %d definiert (Modus %s), %d Hoefe mit Rolle", #(s.roles or {}), tostring(s.rolesMode), n)
     ServerRulesRoles.logDiagnostics()
+    local okB, errB = pcall(ServerRulesBuild.logDiagnostics)
+    if not okB then
+        ServerRules.log("Warnung: Diagnose Bauen: %s", tostring(errB))
+    end
+    local okT, errT = pcall(ServerRulesBuild.runPlacementTest)
+    if not okT then
+        ServerRules.log("Warnung: Test-Platzierung: %s", tostring(errT))
+    end
     -- run the production check once now (an empty dedicated server is paused and does not update)
     ServerRulesProductions.checkTimer = 10000
     ServerRulesProductions.update(0)
@@ -342,6 +432,7 @@ function listener:update(dt)
     if g_server ~= nil then
         ServerRulesRoles.update(dt)
         ServerRulesProductions.update(dt)
+        ServerRulesBuild.update(dt)
         local interval = ServerRules.settings ~= nil and ServerRules.settings.reloadInterval or 60
         if interval > 0 then
             ServerRules.reloadTimer = ServerRules.reloadTimer + dt
@@ -400,6 +491,8 @@ end
 
 -- roles: purchase/contract/selling checks, saving the assignment with the savegame
 ServerRulesRoles.installHooks()
+-- building outside the own land (I-34)
+ServerRulesBuild.installHooks()
 
 if FSCareerMissionInfo ~= nil and FSCareerMissionInfo.saveToXMLFile ~= nil then
     FSCareerMissionInfo.saveToXMLFile = Utils.appendedFunction(FSCareerMissionInfo.saveToXMLFile, function(missionInfo, ...)

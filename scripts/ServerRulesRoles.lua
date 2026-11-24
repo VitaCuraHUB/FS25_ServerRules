@@ -164,6 +164,12 @@ function ServerRulesRoles.loadFromXML(xml, settings, warnings)
         table.insert(warnings, "roles#mode muss block oder warn sein - nehme block")
         settings.rolesMode = "block"
     end
+    -- building outside own land: off | admin | roles | all (roles = admin + roles with <build anywhere="true"/>)
+    settings.buildAnywhere = string.lower(readStr(xml, "serverRules.build#anywhere") or "off")
+    if settings.buildAnywhere ~= "off" and settings.buildAnywhere ~= "admin" and settings.buildAnywhere ~= "roles" and settings.buildAnywhere ~= "all" then
+        table.insert(warnings, "build#anywhere muss off, admin, roles oder all sein - nehme off")
+        settings.buildAnywhere = "off"
+    end
     local i = 0
     while true do
         local key = string.format("serverRules.roles.role(%d)", i)
@@ -185,7 +191,8 @@ function ServerRulesRoles.loadFromXML(xml, settings, warnings)
                 missionRules = readRuleList(xml, key .. ".missions", ServerRulesRoles.MISSION_FIELDS),
                 loanMax = tonumber(readStr(xml, key .. ".loan#max") or ""),
                 sellDefault = string.lower(readStr(xml, key .. ".sell#default") or "allow"),
-                sellRules = readRuleList(xml, key .. ".sell", ServerRulesRoles.SELL_FIELDS)
+                sellRules = readRuleList(xml, key .. ".sell", ServerRulesRoles.SELL_FIELDS),
+                buildAnywhere = string.lower(readStr(xml, key .. ".build#anywhere") or "false") == "true"
             }
             table.insert(settings.roles, role)
             settings.rolesById[id] = role
@@ -210,10 +217,10 @@ local function dec(s)
 end
 
 function ServerRulesRoles.serialize(settings, lines)
-    table.insert(lines, table.concat({"RMODE", enc(settings.rolesMode)}, SEP))
+    table.insert(lines, table.concat({"RMODE", enc(settings.rolesMode), enc(settings.buildAnywhere)}, SEP))
     for _, role in ipairs(settings.roles or {}) do
         table.insert(lines, table.concat({"R", enc(role.id), enc(role.name), enc(role.description), enc(role.buyDefault),
-            enc(role.missionsDefault), enc(role.loanMax), enc(role.sellDefault)}, SEP))
+            enc(role.missionsDefault), enc(role.loanMax), enc(role.sellDefault), role.buildAnywhere and "1" or "0"}, SEP))
         for _, r in ipairs(role.buyRules) do
             table.insert(lines, table.concat({"RB", enc(role.id), enc(r.order), enc(r.action), enc(r.item), enc(r.mod), enc(r.category),
                 enc(r.brand), enc(r.species), enc(r.source), enc(r.score)}, SEP))
@@ -233,9 +240,10 @@ function ServerRulesRoles.deserializeLine(rules, f)
     local kind = f[1]
     if kind == "RMODE" then
         rules.rolesMode = dec(f[2]) or "block"
+        rules.buildAnywhere = dec(f[3]) or "off"
     elseif kind == "R" then
         local role = {id = dec(f[2]), name = dec(f[3]) or dec(f[2]), description = dec(f[4]) or "", buyDefault = dec(f[5]) or "allow",
-            missionsDefault = dec(f[6]) or "allow", loanMax = tonumber(f[7] or ""), sellDefault = dec(f[8]) or "allow",
+            missionsDefault = dec(f[6]) or "allow", loanMax = tonumber(f[7] or ""), sellDefault = dec(f[8]) or "allow", buildAnywhere = f[9] == "1",
             buyRules = {}, missionRules = {}, sellRules = {}}
         if role.id ~= nil then
             table.insert(rules.roles, role)
